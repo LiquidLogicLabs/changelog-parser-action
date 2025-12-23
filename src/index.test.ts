@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import { readContent, isRepoRootUrl, constructChangelogUrl } from './path-handler';
-import { parseChangelog, findVersionEntry } from './parser';
+import { parseChangelog, findVersionEntry, findConfigFile, loadConfig } from './parser';
+import { run } from './index';
 
 // Mock dependencies
 jest.mock('@actions/core');
@@ -13,10 +14,18 @@ const mockIsRepoRootUrl = isRepoRootUrl as jest.MockedFunction<typeof isRepoRoot
 const mockConstructChangelogUrl = constructChangelogUrl as jest.MockedFunction<typeof constructChangelogUrl>;
 const mockParseChangelog = parseChangelog as jest.MockedFunction<typeof parseChangelog>;
 const mockFindVersionEntry = findVersionEntry as jest.MockedFunction<typeof findVersionEntry>;
+const mockFindConfigFile = findConfigFile as jest.MockedFunction<typeof findConfigFile>;
+const mockLoadConfig = loadConfig as jest.MockedFunction<typeof loadConfig>;
 
 describe('Changelog Parser Action', () => {
+  const originalEnv = process.env;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    // No need to reset modules since we're calling run() directly now
+    
+    // Clear GITHUB_TOKEN from environment for tests
+    delete process.env.GITHUB_TOKEN;
     
     // Set default mock implementations
     mockCore.getInput.mockImplementation((name: string) => {
@@ -38,6 +47,37 @@ describe('Changelog Parser Action', () => {
     mockCore.warning = jest.fn();
     mockCore.error = jest.fn();
     mockCore.setFailed = jest.fn();
+    
+    // Mock config file functions to return null/empty by default
+    mockFindConfigFile.mockResolvedValue(null);
+    mockLoadConfig.mockResolvedValue({});
+    
+    // Set default parseChangelog return value
+    mockParseChangelog.mockReturnValue({
+      entries: [
+        {
+          version: '1.0.0',
+          date: '2024-01-01',
+          status: 'released',
+          changes: '- Initial release',
+        },
+      ],
+    });
+    
+    // Set default findVersionEntry to return first entry when no version specified, or match version
+    mockFindVersionEntry.mockImplementation((parsed, version) => {
+      if (!version && parsed.entries.length > 0) {
+        return parsed.entries[0];
+      }
+      if (version && parsed.entries.length > 0) {
+        return parsed.entries.find(e => e.version === version) || parsed.entries[0];
+      }
+      return parsed.entries[0] || null;
+    });
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
   });
 
   describe('repo_url handling', () => {
@@ -45,6 +85,7 @@ describe('Changelog Parser Action', () => {
       mockCore.getInput.mockImplementation((name: string) => {
         if (name === 'repo_url') return 'https://github.com/owner/repo';
         if (name === 'ref') return 'main';
+        if (name === 'version') return '1.0.0';
         return '';
       });
       
@@ -60,18 +101,8 @@ describe('Changelog Parser Action', () => {
           },
         ],
       });
-      mockFindVersionEntry.mockReturnValue({
-        version: '1.0.0',
-        date: '2024-01-01',
-        status: 'released',
-        changes: '- Initial release',
-      });
-
-      // Import and run the action
-      await import('./index');
-
-      // Wait for async operations
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Call run() directly
+      await run();
 
       expect(mockConstructChangelogUrl).toHaveBeenCalledWith('https://github.com/owner/repo', 'main');
       expect(mockReadContent).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md', undefined);
@@ -81,6 +112,7 @@ describe('Changelog Parser Action', () => {
       mockCore.getInput.mockImplementation((name: string) => {
         if (name === 'repo_url') return 'https://github.com/owner/repo';
         if (name === 'ref') return 'develop';
+        if (name === 'version') return '1.0.0';
         return '';
       });
       
@@ -96,15 +128,8 @@ describe('Changelog Parser Action', () => {
           },
         ],
       });
-      mockFindVersionEntry.mockReturnValue({
-        version: '1.0.0',
-        date: '2024-01-01',
-        status: 'released',
-        changes: '- Initial release',
-      });
 
-      await import('./index');
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await run();
 
       expect(mockConstructChangelogUrl).toHaveBeenCalledWith('https://github.com/owner/repo', 'develop');
     });
@@ -113,6 +138,7 @@ describe('Changelog Parser Action', () => {
       mockCore.getInput.mockImplementation((name: string) => {
         if (name === 'repo_url') return 'https://github.com/owner/repo';
         if (name === 'ref') return '';
+        if (name === 'version') return '1.0.0';
         return '';
       });
       
@@ -128,15 +154,8 @@ describe('Changelog Parser Action', () => {
           },
         ],
       });
-      mockFindVersionEntry.mockReturnValue({
-        version: '1.0.0',
-        date: '2024-01-01',
-        status: 'released',
-        changes: '- Initial release',
-      });
 
-      await import('./index');
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await run();
 
       expect(mockConstructChangelogUrl).toHaveBeenCalledWith('https://github.com/owner/repo', 'main');
     });
@@ -147,6 +166,7 @@ describe('Changelog Parser Action', () => {
       mockCore.getInput.mockImplementation((name: string) => {
         if (name === 'path') return 'https://github.com/owner/repo';
         if (name === 'ref') return 'main';
+        if (name === 'version') return '1.0.0';
         return '';
       });
       
@@ -163,15 +183,8 @@ describe('Changelog Parser Action', () => {
           },
         ],
       });
-      mockFindVersionEntry.mockReturnValue({
-        version: '1.0.0',
-        date: '2024-01-01',
-        status: 'released',
-        changes: '- Initial release',
-      });
 
-      await import('./index');
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await run();
 
       expect(mockIsRepoRootUrl).toHaveBeenCalledWith('https://github.com/owner/repo');
       expect(mockConstructChangelogUrl).toHaveBeenCalledWith('https://github.com/owner/repo', 'main');
@@ -180,6 +193,7 @@ describe('Changelog Parser Action', () => {
     it('should not detect repo root if path is a file URL', async () => {
       mockCore.getInput.mockImplementation((name: string) => {
         if (name === 'path') return 'https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md';
+        if (name === 'version') return '1.0.0';
         return '';
       });
       
@@ -195,15 +209,8 @@ describe('Changelog Parser Action', () => {
           },
         ],
       });
-      mockFindVersionEntry.mockReturnValue({
-        version: '1.0.0',
-        date: '2024-01-01',
-        status: 'released',
-        changes: '- Initial release',
-      });
 
-      await import('./index');
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await run();
 
       expect(mockIsRepoRootUrl).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md');
       expect(mockConstructChangelogUrl).not.toHaveBeenCalled();
@@ -222,8 +229,7 @@ describe('Changelog Parser Action', () => {
       mockConstructChangelogUrl.mockReturnValue('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md');
       mockReadContent.mockRejectedValue(new Error('Failed to fetch https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md: 404 Not Found'));
 
-      await import('./index');
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await run();
 
       expect(mockCore.setOutput).toHaveBeenCalledWith('version', '');
       expect(mockCore.setOutput).toHaveBeenCalledWith('date', '');
@@ -241,8 +247,7 @@ describe('Changelog Parser Action', () => {
       mockIsRepoRootUrl.mockReturnValue(false);
       mockReadContent.mockRejectedValue(new Error('Error reading file ./CHANGELOG.md: not found'));
 
-      await import('./index');
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await run();
 
       expect(mockCore.setOutput).toHaveBeenCalledWith('status', 'nofound');
       expect(mockCore.setFailed).not.toHaveBeenCalled();
@@ -257,10 +262,9 @@ describe('Changelog Parser Action', () => {
       mockIsRepoRootUrl.mockReturnValue(false);
       mockReadContent.mockRejectedValue(new Error('Network error'));
 
-      await import('./index');
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await run();
 
-      expect(mockCore.setFailed).toHaveBeenCalled();
+      expect(mockCore.setFailed).toHaveBeenCalledWith('Network error');
     });
   });
 
@@ -268,6 +272,7 @@ describe('Changelog Parser Action', () => {
     it('should work with local file paths', async () => {
       mockCore.getInput.mockImplementation((name: string) => {
         if (name === 'path') return './CHANGELOG.md';
+        if (name === 'version') return '1.0.0';
         return '';
       });
       
@@ -283,15 +288,8 @@ describe('Changelog Parser Action', () => {
           },
         ],
       });
-      mockFindVersionEntry.mockReturnValue({
-        version: '1.0.0',
-        date: '2024-01-01',
-        status: 'released',
-        changes: '- Initial release',
-      });
 
-      await import('./index');
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await run();
 
       expect(mockReadContent).toHaveBeenCalledWith('./CHANGELOG.md', undefined);
       expect(mockConstructChangelogUrl).not.toHaveBeenCalled();
@@ -300,6 +298,7 @@ describe('Changelog Parser Action', () => {
     it('should work with remote file URLs', async () => {
       mockCore.getInput.mockImplementation((name: string) => {
         if (name === 'path') return 'https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md';
+        if (name === 'version') return '1.0.0';
         return '';
       });
       
@@ -315,22 +314,16 @@ describe('Changelog Parser Action', () => {
           },
         ],
       });
-      mockFindVersionEntry.mockReturnValue({
-        version: '1.0.0',
-        date: '2024-01-01',
-        status: 'released',
-        changes: '- Initial release',
-      });
 
-      await import('./index');
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await run();
 
       expect(mockReadContent).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md', undefined);
       expect(mockConstructChangelogUrl).not.toHaveBeenCalled();
     });
 
     it('should default to ./CHANGELOG.md when path is not provided', async () => {
-      mockCore.getInput.mockImplementation((_name: string) => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        if (name === 'version') return '1.0.0';
         return '';
       });
       
@@ -346,15 +339,8 @@ describe('Changelog Parser Action', () => {
           },
         ],
       });
-      mockFindVersionEntry.mockReturnValue({
-        version: '1.0.0',
-        date: '2024-01-01',
-        status: 'released',
-        changes: '- Initial release',
-      });
 
-      await import('./index');
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await run();
 
       expect(mockReadContent).toHaveBeenCalledWith('./CHANGELOG.md', undefined);
     });

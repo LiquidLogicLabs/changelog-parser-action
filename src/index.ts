@@ -9,7 +9,7 @@ import {
 } from './parser';
 import { ActionConfig } from './types';
 
-async function run(): Promise<void> {
+export async function run(): Promise<void> {
   try {
     // Get inputs
     let path = core.getInput('path');
