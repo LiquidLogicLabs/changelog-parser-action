@@ -15,6 +15,7 @@ This action is inspired by and extends the functionality of [changelog-reader-ac
 - ✅ Read changelogs from local file paths
 - ✅ Read changelogs from remote URLs (GitHub, GitLab, Bitbucket, Gitea, and any HTTP server)
 - ✅ Automatic blob-to-raw URL conversion for GitHub, GitLab, Bitbucket, and Gitea (both cloud and self-hosted)
+- ✅ Automatic CHANGELOG.md detection from repository root URLs
 - ✅ Optional authentication token support for remote URLs
 - ✅ Keep a Changelog format parsing
 - ✅ Version extraction and validation
@@ -80,11 +81,43 @@ This action is inspired by and extends the functionality of [changelog-reader-ac
     token: ${{ secrets.GITEA_TOKEN }}
 ```
 
+### Repository URL Example (Auto-detect CHANGELOG.md)
+
+You can provide a repository URL and the action will automatically fetch `CHANGELOG.md` from the repository root:
+
+```yaml
+- name: Read Changelog from Repository URL
+  uses: LiquidLogicLabs/changelog-parser-action@v1.0.0
+  id: changelog
+  with:
+    repo_url: 'https://github.com/owner/repo'
+    ref: 'main'
+    version: '1.2.3'
+```
+
+### Repository Root URL in Path
+
+Alternatively, you can pass the repository root URL directly as the `path` input (leave `path` blank or omit it):
+
+```yaml
+- name: Read Changelog from Repo Root URL
+  uses: LiquidLogicLabs/changelog-parser-action@v1.0.0
+  id: changelog
+  with:
+    path: 'https://github.com/owner/repo'
+    ref: 'main'
+    version: '1.2.3'
+```
+
+Both approaches work the same way - the action will automatically detect that it's a repository root URL and construct the appropriate `CHANGELOG.md` URL.
+
 ## Inputs
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
-| `path` | Path to changelog file or URL | No | `./CHANGELOG.md` |
+| `path` | Path to changelog file or URL. Can also be a repository root URL (e.g., `https://github.com/owner/repo`) | No | `./CHANGELOG.md` |
+| `repo_url` | Repository URL (e.g., `https://github.com/owner/repo`). When `path` is blank, CHANGELOG.md will be fetched from the root of this repository | No | - |
+| `ref` | Branch or ref to use when constructing CHANGELOG.md URL from `repo_url` or repository root URL in `path` | No | `main` |
 | `token` | Authentication token for remote URLs | No | `${{ github.token }}` |
 | `version` | Version to retrieve (or "Unreleased") | No | Latest version |
 | `validation_level` | Validation level: `none`, `warn`, or `error` | No | `none` |
@@ -97,7 +130,7 @@ This action is inspired by and extends the functionality of [changelog-reader-ac
 |--------|-------------|
 | `version` | Version number found (e.g., `2.0.0`) |
 | `date` | Release date (e.g., `2020-08-22`) |
-| `status` | Status: `prereleased`, `released`, `unreleased`, or `yanked` |
+| `status` | Status: `prereleased`, `released`, `unreleased`, `yanked`, or `nofound` (when CHANGELOG.md is not found) |
 | `changes` | Changelog entry content |
 
 ## Supported URL Formats
@@ -140,6 +173,8 @@ You can use a configuration file instead of specifying options in your workflow.
 ```json
 {
   "path": "./CHANGELOG.md",
+  "repo_url": "https://github.com/owner/repo",
+  "ref": "main",
   "validation_level": "warn",
   "validation_depth": 10
 }

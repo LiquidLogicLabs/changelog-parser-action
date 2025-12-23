@@ -7,6 +7,8 @@ export interface ChangelogEntry {
 
 export interface ActionConfig {
   path?: string;
+  repo_url?: string;
+  ref?: string;
   validation_level?: 'none' | 'warn' | 'error';
   validation_depth?: number;
 }

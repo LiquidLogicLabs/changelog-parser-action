@@ -22,6 +22,13 @@ inputs:
   config_file:
     description: 'Path to a configuration file. If not specified, will look for .changelog-reader.json, .changelog-reader.yml, .changelog-reader.yaml, .changelogrc, or .changelogrc.json in the repository root'
     required: false
+  repo_url:
+    description: 'Repository URL (e.g., https://github.com/owner/repo). When path is blank, CHANGELOG.md will be fetched from the root of this repository'
+    required: false
+  ref:
+    description: 'Branch or ref to use when constructing CHANGELOG.md URL from repo_url (defaults to main)'
+    required: false
+    default: 'main'
 outputs:
   version:
     description: 'Version of the log entry found (e.g., 2.0.0)'

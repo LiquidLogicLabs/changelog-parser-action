@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import { readContent } from './path-handler';
+import { readContent, isRepoRootUrl, constructChangelogUrl } from './path-handler';
 import {
   parseChangelog,
   validateChangelog,
@@ -12,7 +12,9 @@ import { ActionConfig } from './types';
 async function run(): Promise<void> {
   try {
     // Get inputs
-    let path = core.getInput('path') || './CHANGELOG.md';
+    let path = core.getInput('path');
+    let repoUrl = core.getInput('repo_url');
+    let ref = core.getInput('ref') || 'main';
     const token = core.getInput('token') || process.env.GITHUB_TOKEN;
     const version = core.getInput('version');
     const validationLevel = (core.getInput('validation_level') ||
@@ -41,17 +43,56 @@ async function run(): Promise<void> {
       }
     }
 
-    // Override path from config if not explicitly provided
+    // Override inputs from config if not explicitly provided
     if (config.path && !core.getInput('path')) {
       path = config.path;
+    }
+    if (config.repo_url && !core.getInput('repo_url')) {
+      repoUrl = config.repo_url;
+    }
+    if (config.ref && !core.getInput('ref')) {
+      ref = config.ref;
+    }
+
+    // Determine the final path/URL to use
+    let finalPath: string;
+    
+    // Check if path is blank/empty and repo_url is provided
+    if ((!path || path.trim() === '') && repoUrl) {
+      finalPath = constructChangelogUrl(repoUrl, ref);
+      core.info(`Constructed CHANGELOG.md URL from repo_url: ${finalPath}`);
+    }
+    // Check if path is a repository root URL
+    else if (path && isRepoRootUrl(path)) {
+      finalPath = constructChangelogUrl(path, ref);
+      core.info(`Detected repo root URL, constructed CHANGELOG.md URL: ${finalPath}`);
+    }
+    // Use path as-is (default behavior)
+    else {
+      finalPath = path || './CHANGELOG.md';
     }
 
     // Validation settings are already set from config above
 
-    core.info(`Reading changelog from: ${path}`);
+    core.info(`Reading changelog from: ${finalPath}`);
 
     // Read changelog content
-    const content = await readContent(path, token);
+    let content: string;
+    try {
+      content = await readContent(finalPath, token);
+    } catch (error) {
+      // Check if it's a 404 error (file not found)
+      if (error instanceof Error && (error.message.includes('404') || error.message.includes('not found'))) {
+        core.info('CHANGELOG.md not found at the specified location');
+        core.setOutput('version', '');
+        core.setOutput('date', '');
+        core.setOutput('status', 'nofound');
+        core.setOutput('changes', '');
+        return;
+      }
+      // Re-throw other errors
+      throw error;
+    }
 
     if (!content || content.trim() === '') {
       throw new Error('Changelog file is empty');
