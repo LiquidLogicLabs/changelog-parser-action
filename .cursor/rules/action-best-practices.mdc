@@ -1,0 +1,466 @@
+# GitHub/Gitea Action Best Practices
+
+This document outlines best practices for creating GitHub/Gitea Actions based on patterns used in LiquidLogicLabs action repositories.
+
+## Project Structure
+
+### Required Files
+
+- `action.yml` - Action metadata, inputs, outputs, and runtime configuration
+- `package.json` - Node.js dependencies and build scripts
+- `tsconfig.json` - TypeScript configuration
+- `CHANGELOG.md` - Keep a Changelog format (required for release process)
+- `README.md` - Comprehensive documentation with badges and examples
+- `.gitignore` - Organized by category (dependencies, build outputs, IDE, OS files, etc.)
+
+### Directory Structure
+
+```txt
+action-name/
+├── action.yml              # Action definition
+├── package.json            # Dependencies and scripts
+├── tsconfig.json           # TypeScript config
+├── CHANGELOG.md            # Keep a Changelog format
+├── README.md               # Documentation with badges
+├── .gitignore              # Organized ignore patterns
+├── src/                    # TypeScript source code
+│   ├── index.ts           # Main entry point
+│   ├── types.ts           # TypeScript type definitions
+│   └── [module].ts        # Modular code organization
+├── dist/                   # Built output (COMMITTED to git)
+│   └── index.js           # Bundled action code
+├── .github/
+│   └── workflows/
+│       ├── ci.yml         # CI workflow (build, lint, test)
+│       └── release.yml     # Release workflow (package, release)
+└── scripts/                # Optional helper scripts
+    └── [helper].js        # Release/build helpers
+```
+
+## Action Definition (action.yml)
+
+### Structure
+
+```yaml
+name: 'Action Name'
+description: 'Clear, concise description of what the action does'
+author: 'Optional author name'
+inputs:
+  input_name:
+    description: 'Clear description with examples if needed'
+    required: false
+    default: 'default-value'
+outputs:
+  output_name:
+    description: 'Clear description of output value'
+runs:
+  using: 'node20'  # Always use Node.js 20
+  main: 'dist/index.js'  # Point to bundled output
+branding:
+  icon: 'icon-name'  # Choose appropriate icon
+  color: 'blue'     # Choose appropriate color
+```
+
+### Best Practices
+
+- Use descriptive input/output names (snake_case)
+- Provide clear descriptions with examples for complex inputs
+- Set sensible defaults for optional inputs
+- Always use `node20` as the runtime
+- Point `main` to `dist/index.js` (the bundled output)
+- Include branding for better GitHub Marketplace appearance
+
+## TypeScript Configuration
+
+### tsconfig.json Pattern
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "**/*.test.ts", "dist", "lib", "**/__tests__/**"]
+}
+```
+
+### Key Points
+
+- Target ES2022 for modern Node.js 20
+- Use CommonJS modules (required for GitHub Actions)
+- Enable strict mode for type safety
+- Generate source maps for debugging
+- Exclude test files from compilation
+
+## Package.json Configuration
+
+### Required Scripts
+
+```json
+{
+  "scripts": {
+    "build": "tsc && ncc build src/index.ts -o dist --source-map --license licenses.txt",
+    "package": "npm run build",
+    "test": "jest",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write \"src/**/*.ts\""
+  }
+}
+```
+
+### Dependencies
+
+- **Runtime**: Only `@actions/core` (no other runtime deps unless absolutely necessary)
+- **Dev Dependencies**: TypeScript, ESLint, Prettier, Jest, @vercel/ncc, @types packages
+
+### Build Process
+
+1. Compile TypeScript: `tsc`
+2. Bundle with ncc: `ncc build src/index.ts -o dist --source-map --license licenses.txt`
+3. Output to `dist/index.js` (single bundled file)
+
+## Source Code Organization
+
+### Main Entry Point (src/index.ts)
+
+```typescript
+import * as core from '@actions/core';
+import { helperFunction } from './helper';
+
+async function run(): Promise<void> {
+  try {
+    // Get inputs
+    const input = core.getInput('input_name');
+    
+    // Validate inputs
+    if (!input) {
+      throw new Error('Input is required');
+    }
+    
+    // Core logic
+    const result = await helperFunction(input);
+    
+    // Set outputs
+    core.setOutput('output_name', result);
+    
+    core.info('Action completed successfully');
+  } catch (error) {
+    if (error instanceof Error) {
+      core.setFailed(error.message);
+    } else {
+      core.setFailed('Unknown error occurred');
+    }
+  }
+}
+
+// Run the action
+run();
+```
+
+### Code Organization Principles
+
+- **Modular design**: Split functionality into separate modules/files
+- **Type safety**: Define types in `types.ts` or per-module
+- **Error handling**: Always wrap in try/catch, use `core.setFailed()`
+- **Logging**: Use `core.info()`, `core.warning()`, `core.error()` appropriately
+- **Secret masking**: Use `core.setSecret()` for sensitive values
+- **Input validation**: Validate inputs early and provide clear error messages
+
+## CI/CD Workflows
+
+### CI Workflow (.github/workflows/ci.yml)
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+        continue-on-error: true  # Don't fail CI if tests are missing
+```
+
+### Release Workflow (.github/workflows/release.yml)
+
+```yaml
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Semver tags only
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for changelog generation
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build and package action
+        run: npm run package
+
+      - name: Generate release notes
+        id: release_notes
+        uses: mikepenz/release-changelog-builder-action@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          name: Release ${{ steps.version.outputs.version }}
+          body: ${{ steps.release_notes.outputs.changelog }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### Release Process
+
+1. Developer creates semver tag: `git tag v1.2.3 && git push origin v1.2.3`
+2. Release workflow triggers automatically
+3. Builds and packages the action
+4. Generates release notes from PRs/changelog
+5. Creates GitHub release with combined content
+6. Action is now available at `@v1.2.3`
+
+## Git Configuration
+
+### .gitignore Organization
+
+```gitignore
+# Dependencies
+node_modules/
+
+# Build outputs
+lib/
+*.tsbuildinfo
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# IDE and editor files
+.idea/
+.vscode/
+.bmad-core/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+
+# Test coverage
+coverage/
+.nyc_output/
+```
+
+### Important Notes
+
+- **DO commit `dist/` folder** - It's required for the action to work
+- **DO NOT commit** `node_modules/`, `lib/`, or build artifacts
+- Organize `.gitignore` by category with comments
+
+## Documentation (README.md)
+
+### Required Sections
+
+1. **Badges** - CI status, License, TypeScript version
+2. **Description** - What the action does
+3. **Features** - Bullet list of key capabilities
+4. **Usage Examples** - Multiple real-world examples
+5. **Inputs Table** - All inputs with descriptions
+6. **Outputs Table** - All outputs with descriptions
+7. **Configuration** - If config files are supported
+8. **Examples** - Complete workflow examples
+9. **Security** - Security considerations
+10. **License** - MIT (typically)
+11. **Credits/Acknowledgments** - If based on another project
+
+### Badge Examples
+
+```markdown
+[![CI](https://github.com/org/repo/actions/workflows/ci.yml/badge.svg)](https://github.com/org/repo/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
+```
+
+## CHANGELOG.md
+
+### Format (Keep a Changelog)
+
+```markdown
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.0.0] - 2025-12-23
+
+### Added
+- Initial implementation
+- Feature descriptions
+
+### Changed
+- Change descriptions
+
+### Fixed
+- Bug fix descriptions
+```
+
+## Code Quality
+
+### Linting
+
+- Use ESLint with TypeScript rules
+- Configure in `.eslintrc.json`
+- Run `npm run lint` in CI
+
+### Formatting
+
+- Use Prettier for consistent formatting
+- Configure in `.prettierrc.json`
+- Format before committing
+
+### Testing
+
+- Write unit tests for core functionality
+- Use Jest with ts-jest
+- Place tests in `src/__tests__/` or alongside source files
+- Use `continue-on-error: true` in CI if tests are optional
+
+## Security Best Practices
+
+1. **Token Handling**
+   - Use `core.setSecret()` to mask tokens in logs
+   - Only use tokens when necessary
+   - Prefer environment variables over hardcoded values
+
+2. **Input Validation**
+   - Validate all inputs
+   - Sanitize user-provided data
+   - Provide clear error messages
+
+3. **Dependencies**
+   - Minimize runtime dependencies
+   - Keep dependencies up to date
+   - Review security advisories
+
+4. **No API Dependencies**
+   - Prefer standard HTTP over platform-specific APIs when possible
+   - Makes actions more portable and platform-agnostic
+
+## Release Process
+
+1. **Update CHANGELOG.md** with new version entry
+2. **Commit changes** to main branch
+3. **Create semver tag**: `git tag v1.2.3`
+4. **Push tag**: `git push origin v1.2.3`
+5. **Release workflow** automatically:
+   - Builds the action
+   - Generates release notes
+   - Creates GitHub release
+6. **Action is available** at `@v1.2.3`
+
+## Examples from LiquidLogicLabs Actions
+
+### changelog-parser-action
+
+- Extends functionality of existing action (changelog-reader-action)
+- Adds remote URL support with blob-to-raw conversion
+- Uses action itself in release workflow to extract changelog
+- Comprehensive URL handling for multiple platforms
+
+### gitea-action-trigger-workflow
+
+- Gitea-specific action (not GitHub)
+- Modular code organization (config, http, gitea, log modules)
+- Comprehensive error handling and logging
+- Uses conventional-changelog-cli for changelog generation
+- Includes floating tag support (v1, v1.2)
+
+## Key Principles
+
+1. **Simplicity**: Keep actions focused on a single purpose
+2. **Portability**: Avoid platform-specific APIs when possible
+3. **Documentation**: Comprehensive README with examples
+4. **Type Safety**: Use TypeScript with strict mode
+5. **Error Handling**: Always handle errors gracefully
+6. **Testing**: Test when possible inside a runner (ex: act)
+7. **CI/CD**: Automate build, test, and release processes
+8. **Attribution**: Credit original authors when extending existing work
