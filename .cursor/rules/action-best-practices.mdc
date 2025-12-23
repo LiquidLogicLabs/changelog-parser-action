@@ -305,6 +305,10 @@ lib/
 
 # Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # Environment variables
 .env
@@ -312,8 +316,6 @@ lib/
 
 # IDE and editor files
 .idea/
-.vscode/
-.bmad-core/
 *.swp
 *.swo
 *~
@@ -324,6 +326,10 @@ lib/
 # Test coverage
 coverage/
 .nyc_output/
+
+# AI Tools
+.bmad-core/
+.github/chatmodes/
 ```
 
 ### Important Notes
