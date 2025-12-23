@@ -60,28 +60,16 @@ jobs:
       - name: Combine changelog and release notes
         id: combined
         run: |
-          CHANGELOG_ENTRY="${{ steps.changelog.outputs.changes }}"
-          RELEASE_NOTES="${{ steps.release_notes.outputs.changelog }}"
-          
-          # Combine changelog entry with release notes
-          COMBINED=$(cat <<EOF
-          $CHANGELOG_ENTRY
-          
-          ---
-          
-          $RELEASE_NOTES
-          EOF
-          )
-          
-          # Escape for GitHub Actions
-          COMBINED="${COMBINED//$'\n'/'%0A'}"
-          echo "body<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG_ENTRY" >> $GITHUB_OUTPUT
-          echo "" >> $GITHUB_OUTPUT
-          echo "---" >> $GITHUB_OUTPUT
-          echo "" >> $GITHUB_OUTPUT
-          echo "$RELEASE_NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # Use heredoc to safely handle multiline content with special characters
+          {
+            echo 'body<<EOF'
+            echo '${{ steps.changelog.outputs.changes }}'
+            echo ''
+            echo '---'
+            echo ''
+            echo '${{ steps.release_notes.outputs.changelog }}'
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
