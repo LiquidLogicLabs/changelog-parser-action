@@ -14,6 +14,12 @@ lib/
 
 # IDE and editor files
 .idea/
+.vscode/
+.bmad-core/
+.cursor/
+!.cursor/rules/
+!.cursor/rules/*.mdc
+.github/chatmodes/
 *.swp
 *.swo
 *~
@@ -24,6 +30,3 @@ lib/
 # Test coverage
 coverage/
 .nyc_output/
-
-# AI Tools
-.bmad-core/
