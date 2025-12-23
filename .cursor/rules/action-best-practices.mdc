@@ -470,6 +470,7 @@ jobs:
         id: release_notes
         uses: mikepenz/release-changelog-builder-action@v6
         with:
+          mode: "HYBRID"
           configurationJson: |
             {
               "template": "#{{CHANGELOG}}\n\n<details>\n<summary>Pull Requests</summary>\n\n#{{PR_LIST}}\n</details>\n\n---\n\n### Usage\n\n\\`\\`\\`yaml\n- uses: org/action-name@${{ github.ref_name }}\n  with:\n    input-name: 'value'\n\\`\\`\\`"
@@ -569,6 +570,7 @@ jobs:
         id: release_notes
         uses: mikepenz/release-changelog-builder-action@v6
         with:
+          mode: "HYBRID"
           configurationJson: |
             {
               "template": "#{{CHANGELOG}}\n\n<details>\n<summary>Pull Requests</summary>\n\n#{{PR_LIST}}\n</details>\n\n---\n\n### Usage\n\n\\`\\`\\`yaml\n- uses: org/action-name@${{ github.ref_name }}\n  with:\n    input-name: 'value'\n\\`\\`\\`"
@@ -781,10 +783,20 @@ Use `nowsprinting/check-version-format-action@v4` to:
 
 Use `mikepenz/release-changelog-builder-action@v6` to:
 
-- Generate changelog from merged PRs between tags
+- Generate changelog from merged PRs and commits between tags
+- **Use `mode: "HYBRID"`** to include both Pull Requests and commits
+  - This ensures releases show changes even when commits are made directly to main
+  - No need for custom commit extraction steps
+  - The `{{CHANGELOG}}` template variable automatically includes both PRs and commits
 - Customize format with templates
 - Include PR lists and contributor information
 - Configure categories and exclusions via `configurationJson`
+
+**Available modes:**
+
+- `PR` (default): Only includes Pull Requests
+- `COMMIT`: Only includes commits (treats commits like PRs)
+- `HYBRID` (recommended): Includes both PRs and commits - best for projects that use both workflows
 
 ## Examples from LiquidLogicLabs Actions
 
@@ -795,7 +807,7 @@ Use `mikepenz/release-changelog-builder-action@v6` to:
 - Supports repository root URL detection and automatic CHANGELOG.md fetching
 - Comprehensive URL handling for multiple platforms (GitHub, GitLab, Bitbucket, Gitea)
 - Uses `check-version-format-action` for version validation
-- Uses `release-changelog-builder-action` for automated release notes generation
+- Uses `release-changelog-builder-action` with `HYBRID` mode for automated release notes generation (includes both PRs and commits)
 
 ### ca-certificate-import-action
 
