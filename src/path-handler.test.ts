@@ -1,7 +1,6 @@
 import {
   isRepoRootUrl,
   constructChangelogUrl,
-  isUrl,
 } from './path-handler';
 
 describe('isRepoRootUrl', () => {

@@ -330,7 +330,7 @@ describe('Changelog Parser Action', () => {
     });
 
     it('should default to ./CHANGELOG.md when path is not provided', async () => {
-      mockCore.getInput.mockImplementation((name: string) => {
+      mockCore.getInput.mockImplementation((_name: string) => {
         return '';
       });
       
