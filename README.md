@@ -1,6 +1,14 @@
 # Changelog Parser Action
 
+[![CI](https://github.com/LiquidLogicLabs/changelog-parser-action/actions/workflows/ci.yml/badge.svg)](https://github.com/LiquidLogicLabs/changelog-parser-action/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
+
 A GitHub Action that reads and parses `CHANGELOG.md` files from local paths or remote URLs, following the [Keep a Changelog](https://keepachangelog.com/) standard.
+
+## Credits
+
+This action is inspired by and extends the functionality of [changelog-reader-action](https://github.com/mindsers/changelog-reader-action) by [mindsers](https://github.com/mindsers). We've added support for remote URLs and enhanced URL handling capabilities while maintaining compatibility with the original action's API.
 
 ## Features
 
@@ -203,4 +211,9 @@ jobs:
 ## License
 
 MIT
+
+## Acknowledgments
+
+- Based on [changelog-reader-action](https://github.com/mindsers/changelog-reader-action) by [mindsers](https://github.com/mindsers)
+- Follows the [Keep a Changelog](https://keepachangelog.com/) standard
 
