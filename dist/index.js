@@ -25701,6 +25701,7 @@ async function run() {
         const validationDepth = parseInt(core.getInput('validation_depth') || '10', 10);
         const configFileInput = core.getInput('config_file');
         const debug = core.getInput('debug') === 'true' || process.env.ACTIONS_STEP_DEBUG === 'true';
+        const ignoreCertErrors = core.getInput('ignore_cert_errors') === 'true';
         // Enable ACTIONS_STEP_DEBUG if our debug flag is set
         if (core.getInput('debug') === 'true' && !process.env.ACTIONS_STEP_DEBUG) {
             process.env.ACTIONS_STEP_DEBUG = 'true';
@@ -25795,10 +25796,14 @@ async function run() {
         else {
             debugLog(`  No token provided`);
         }
+        if (ignoreCertErrors) {
+            debugLog(`  Ignoring SSL certificate errors`);
+            core.warning('SSL certificate validation is disabled. This is a security risk and should only be used with self-hosted instances with self-signed certificates.');
+        }
         // Read changelog content
         let content;
         try {
-            content = await (0, path_handler_1.readContent)(finalPath, token);
+            content = await (0, path_handler_1.readContent)(finalPath, token, ignoreCertErrors);
             debugLog(`Successfully read ${content.length} characters from changelog`);
         }
         catch (error) {
@@ -26203,6 +26208,7 @@ exports.constructChangelogUrl = constructChangelogUrl;
 exports.readContent = readContent;
 const fs = __importStar(__nccwpck_require__(9896));
 const path = __importStar(__nccwpck_require__(6928));
+const https = __importStar(__nccwpck_require__(5692));
 /**
  * Converts blob URLs to raw URLs for various git platforms
  */
@@ -26367,9 +26373,9 @@ function constructChangelogUrl(repoUrl, ref, repoType = 'auto') {
 /**
  * Reads content from a local file or remote URL
  */
-async function readContent(pathOrUrl, token) {
+async function readContent(pathOrUrl, token, ignoreCertErrors = false) {
     if (isUrl(pathOrUrl)) {
-        return await fetchRemoteUrl(pathOrUrl, token);
+        return await fetchRemoteUrl(pathOrUrl, token, ignoreCertErrors);
     }
     else {
         return await readLocalFile(pathOrUrl);
@@ -26378,7 +26384,7 @@ async function readContent(pathOrUrl, token) {
 /**
  * Fetches content from a remote URL
  */
-async function fetchRemoteUrl(url, token) {
+async function fetchRemoteUrl(url, token, ignoreCertErrors = false) {
     const shouldDebug = process.env.ACTIONS_STEP_DEBUG === 'true';
     const debugLog = (message) => {
         if (shouldDebug) {
@@ -26399,11 +26405,57 @@ async function fetchRemoteUrl(url, token) {
     else {
         debugLog(`No token provided, making unauthenticated request`);
     }
-    const tryFetch = async (urlToTry) => {
-        return await fetch(urlToTry, {
-            headers,
-            redirect: 'follow',
+    // Create custom agent for ignoring certificate errors if needed
+    let agent;
+    if (ignoreCertErrors && rawUrl.startsWith('https://')) {
+        agent = new https.Agent({
+            rejectUnauthorized: false
         });
+        debugLog(`SSL certificate validation disabled (ignore_cert_errors=true)`);
+    }
+    const tryFetch = async (urlToTry) => {
+        // For Node.js 20, we need to use undici's fetch with a custom dispatcher
+        // or use node-fetch. Let's use a workaround with https module for now.
+        if (agent && urlToTry.startsWith('https://')) {
+            // Use https module directly when we need to ignore cert errors
+            return new Promise((resolve, reject) => {
+                const urlObj = new URL(urlToTry);
+                const options = {
+                    hostname: urlObj.hostname,
+                    port: urlObj.port || 443,
+                    path: urlObj.pathname + urlObj.search,
+                    method: 'GET',
+                    headers: headers,
+                    agent: agent
+                };
+                const req = https.request(options, (res) => {
+                    let data = '';
+                    res.on('data', (chunk) => {
+                        data += chunk;
+                    });
+                    res.on('end', () => {
+                        // Create a Response-like object
+                        const response = new Response(data, {
+                            status: res.statusCode || 200,
+                            statusText: res.statusMessage || 'OK',
+                            headers: res.headers
+                        });
+                        resolve(response);
+                    });
+                });
+                req.on('error', (error) => {
+                    reject(error);
+                });
+                req.end();
+            });
+        }
+        else {
+            // Use standard fetch for normal requests
+            return await fetch(urlToTry, {
+                headers,
+                redirect: 'follow',
+            });
+        }
     };
     try {
         debugLog(`Fetching URL: ${rawUrl}`);

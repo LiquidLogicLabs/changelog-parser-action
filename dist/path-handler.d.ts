@@ -24,4 +24,4 @@ export declare function constructChangelogUrl(repoUrl: string, ref: string, repo
 /**
  * Reads content from a local file or remote URL
  */
-export declare function readContent(pathOrUrl: string, token?: string): Promise<string>;
+export declare function readContent(pathOrUrl: string, token?: string, ignoreCertErrors?: boolean): Promise<string>;

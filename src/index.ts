@@ -27,6 +27,7 @@ export async function run(): Promise<void> {
     );
     const configFileInput = core.getInput('config_file');
     const debug = core.getInput('debug') === 'true' || process.env.ACTIONS_STEP_DEBUG === 'true';
+    const ignoreCertErrors = core.getInput('ignore_cert_errors') === 'true';
     
     // Enable ACTIONS_STEP_DEBUG if our debug flag is set
     if (core.getInput('debug') === 'true' && !process.env.ACTIONS_STEP_DEBUG) {
@@ -128,11 +129,15 @@ export async function run(): Promise<void> {
     } else {
       debugLog(`  No token provided`);
     }
+    if (ignoreCertErrors) {
+      debugLog(`  Ignoring SSL certificate errors`);
+      core.warning('SSL certificate validation is disabled. This is a security risk and should only be used with self-hosted instances with self-signed certificates.');
+    }
 
     // Read changelog content
     let content: string;
     try {
-      content = await readContent(finalPath, token);
+      content = await readContent(finalPath, token, ignoreCertErrors);
       debugLog(`Successfully read ${content.length} characters from changelog`);
     } catch (error) {
       debugLog(`Error reading changelog: ${error instanceof Error ? error.message : String(error)}`);

@@ -105,7 +105,7 @@ describe('Changelog Parser Action', () => {
       await run();
 
       expect(mockConstructChangelogUrl).toHaveBeenCalledWith('https://github.com/owner/repo', 'main', 'auto');
-      expect(mockReadContent).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md', undefined);
+      expect(mockReadContent).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md', undefined, false);
     });
 
     it('should use provided ref when constructing URL from repo_url', async () => {
@@ -214,7 +214,7 @@ describe('Changelog Parser Action', () => {
 
       expect(mockIsRepoRootUrl).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md');
       expect(mockConstructChangelogUrl).not.toHaveBeenCalled();
-      expect(mockReadContent).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md', undefined);
+      expect(mockReadContent).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md', undefined, false);
     });
   });
 
@@ -291,7 +291,7 @@ describe('Changelog Parser Action', () => {
 
       await run();
 
-      expect(mockReadContent).toHaveBeenCalledWith('./CHANGELOG.md', undefined);
+      expect(mockReadContent).toHaveBeenCalledWith('./CHANGELOG.md', undefined, false);
       expect(mockConstructChangelogUrl).not.toHaveBeenCalled();
     });
 
@@ -317,7 +317,7 @@ describe('Changelog Parser Action', () => {
 
       await run();
 
-      expect(mockReadContent).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md', undefined);
+      expect(mockReadContent).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md', undefined, false);
       expect(mockConstructChangelogUrl).not.toHaveBeenCalled();
     });
 
@@ -342,7 +342,7 @@ describe('Changelog Parser Action', () => {
 
       await run();
 
-      expect(mockReadContent).toHaveBeenCalledWith('./CHANGELOG.md', undefined);
+      expect(mockReadContent).toHaveBeenCalledWith('./CHANGELOG.md', undefined, false);
     });
   });
 });

@@ -1,5 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as https from 'https';
+import * as http from 'http';
 
 /**
  * Converts blob URLs to raw URLs for various git platforms
@@ -190,10 +192,11 @@ export function constructChangelogUrl(
  */
 export async function readContent(
   pathOrUrl: string,
-  token?: string
+  token?: string,
+  ignoreCertErrors: boolean = false
 ): Promise<string> {
   if (isUrl(pathOrUrl)) {
-    return await fetchRemoteUrl(pathOrUrl, token);
+    return await fetchRemoteUrl(pathOrUrl, token, ignoreCertErrors);
   } else {
     return await readLocalFile(pathOrUrl);
   }
@@ -202,7 +205,7 @@ export async function readContent(
 /**
  * Fetches content from a remote URL
  */
-async function fetchRemoteUrl(url: string, token?: string): Promise<string> {
+async function fetchRemoteUrl(url: string, token?: string, ignoreCertErrors: boolean = false): Promise<string> {
   const shouldDebug = process.env.ACTIONS_STEP_DEBUG === 'true';
   const debugLog = (message: string) => {
     if (shouldDebug) {
@@ -225,11 +228,60 @@ async function fetchRemoteUrl(url: string, token?: string): Promise<string> {
     debugLog(`No token provided, making unauthenticated request`);
   }
 
-  const tryFetch = async (urlToTry: string): Promise<Response> => {
-    return await fetch(urlToTry, {
-      headers,
-      redirect: 'follow',
+  // Create custom agent for ignoring certificate errors if needed
+  let agent: https.Agent | undefined;
+  if (ignoreCertErrors && rawUrl.startsWith('https://')) {
+    agent = new https.Agent({
+      rejectUnauthorized: false
     });
+    debugLog(`SSL certificate validation disabled (ignore_cert_errors=true)`);
+  }
+
+  const tryFetch = async (urlToTry: string): Promise<Response> => {
+    // For Node.js 20, we need to use undici's fetch with a custom dispatcher
+    // or use node-fetch. Let's use a workaround with https module for now.
+    if (agent && urlToTry.startsWith('https://')) {
+      // Use https module directly when we need to ignore cert errors
+      return new Promise((resolve, reject) => {
+        const urlObj = new URL(urlToTry);
+        const options: https.RequestOptions = {
+          hostname: urlObj.hostname,
+          port: urlObj.port || 443,
+          path: urlObj.pathname + urlObj.search,
+          method: 'GET',
+          headers: headers,
+          agent: agent
+        };
+
+        const req = https.request(options, (res) => {
+          let data = '';
+          res.on('data', (chunk) => {
+            data += chunk;
+          });
+          res.on('end', () => {
+            // Create a Response-like object
+            const response = new Response(data, {
+              status: res.statusCode || 200,
+              statusText: res.statusMessage || 'OK',
+              headers: res.headers as Record<string, string>
+            });
+            resolve(response);
+          });
+        });
+
+        req.on('error', (error) => {
+          reject(error);
+        });
+
+        req.end();
+      });
+    } else {
+      // Use standard fetch for normal requests
+      return await fetch(urlToTry, {
+        headers,
+        redirect: 'follow',
+      });
+    }
   };
 
   try {

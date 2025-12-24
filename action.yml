@@ -37,6 +37,10 @@ inputs:
     description: 'Enable debug logging for troubleshooting. Set to true to see detailed information about URL construction, repository type detection, and HTTP requests'
     required: false
     default: 'false'
+  ignore_cert_errors:
+    description: 'Ignore SSL certificate errors (useful for self-hosted instances with self-signed certificates). WARNING: This is a security risk and should only be used with trusted self-hosted instances'
+    required: false
+    default: 'false'
 outputs:
   version:
     description: 'Version of the log entry found (e.g., 2.0.0)'

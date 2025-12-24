@@ -129,7 +129,7 @@ describe('Changelog Parser Action', () => {
             // Call run() directly
             await (0, index_1.run)();
             expect(mockConstructChangelogUrl).toHaveBeenCalledWith('https://github.com/owner/repo', 'main', 'auto');
-            expect(mockReadContent).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md', undefined);
+            expect(mockReadContent).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md', undefined, false);
         });
         it('should use provided ref when constructing URL from repo_url', async () => {
             mockCore.getInput.mockImplementation((name) => {
@@ -233,7 +233,7 @@ describe('Changelog Parser Action', () => {
             await (0, index_1.run)();
             expect(mockIsRepoRootUrl).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md');
             expect(mockConstructChangelogUrl).not.toHaveBeenCalled();
-            expect(mockReadContent).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md', undefined);
+            expect(mockReadContent).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md', undefined, false);
         });
     });
     describe('404 error handling', () => {
@@ -300,7 +300,7 @@ describe('Changelog Parser Action', () => {
                 ],
             });
             await (0, index_1.run)();
-            expect(mockReadContent).toHaveBeenCalledWith('./CHANGELOG.md', undefined);
+            expect(mockReadContent).toHaveBeenCalledWith('./CHANGELOG.md', undefined, false);
             expect(mockConstructChangelogUrl).not.toHaveBeenCalled();
         });
         it('should work with remote file URLs', async () => {
@@ -324,7 +324,7 @@ describe('Changelog Parser Action', () => {
                 ],
             });
             await (0, index_1.run)();
-            expect(mockReadContent).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md', undefined);
+            expect(mockReadContent).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md', undefined, false);
             expect(mockConstructChangelogUrl).not.toHaveBeenCalled();
         });
         it('should default to ./CHANGELOG.md when path is not provided', async () => {
@@ -346,7 +346,7 @@ describe('Changelog Parser Action', () => {
                 ],
             });
             await (0, index_1.run)();
-            expect(mockReadContent).toHaveBeenCalledWith('./CHANGELOG.md', undefined);
+            expect(mockReadContent).toHaveBeenCalledWith('./CHANGELOG.md', undefined, false);
         });
     });
 });
