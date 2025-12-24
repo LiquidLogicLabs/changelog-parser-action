@@ -25700,21 +25700,50 @@ async function run() {
             'none');
         const validationDepth = parseInt(core.getInput('validation_depth') || '10', 10);
         const configFileInput = core.getInput('config_file');
+        const debug = core.getInput('debug') === 'true' || process.env.ACTIONS_STEP_DEBUG === 'true';
+        // Enable ACTIONS_STEP_DEBUG if our debug flag is set
+        if (core.getInput('debug') === 'true' && !process.env.ACTIONS_STEP_DEBUG) {
+            process.env.ACTIONS_STEP_DEBUG = 'true';
+        }
+        // Debug logging helper (uses core.debug which respects ACTIONS_STEP_DEBUG)
+        const debugLog = (message) => {
+            if (debug) {
+                core.debug(message);
+            }
+        };
+        debugLog('=== Changelog Parser Action Debug Mode ===');
+        debugLog(`Inputs received:`);
+        debugLog(`  path: ${path || '(empty)'}`);
+        debugLog(`  repo_url: ${repoUrl || '(empty)'}`);
+        debugLog(`  ref: ${ref}`);
+        debugLog(`  repo_type: ${repoType}`);
+        debugLog(`  version: ${version || '(empty)'}`);
+        debugLog(`  validation_level: ${validationLevel}`);
+        debugLog(`  validation_depth: ${validationDepth}`);
+        debugLog(`  config_file: ${configFileInput || '(empty)'}`);
+        debugLog(`  token: ${token ? '***' : '(empty)'}`);
         // Load configuration if provided
         let config = {
             validation_level: validationLevel,
             validation_depth: validationDepth,
         };
         if (configFileInput) {
+            debugLog(`Loading config from: ${configFileInput}`);
             const fileConfig = await (0, parser_1.loadConfig)(configFileInput);
             config = { ...config, ...fileConfig };
+            debugLog(`Config loaded: ${JSON.stringify(fileConfig, null, 2)}`);
         }
         else {
             // Try to find config file automatically
             const foundConfigFile = await (0, parser_1.findConfigFile)();
             if (foundConfigFile) {
+                debugLog(`Auto-detected config file: ${foundConfigFile}`);
                 const fileConfig = await (0, parser_1.loadConfig)(foundConfigFile);
                 config = { ...config, ...fileConfig };
+                debugLog(`Config loaded: ${JSON.stringify(fileConfig, null, 2)}`);
+            }
+            else {
+                debugLog('No config file found');
             }
         }
         // Override inputs from config if not explicitly provided
@@ -25732,28 +25761,48 @@ async function run() {
         }
         // Determine the final path/URL to use
         let finalPath;
+        debugLog('=== Determining final path/URL ===');
         // If repo_url is provided, it takes precedence (even if path has a default value)
         if (repoUrl) {
+            debugLog(`Using repo_url (takes precedence): ${repoUrl}`);
+            debugLog(`  ref: ${ref}`);
+            debugLog(`  repo_type: ${repoType}`);
             finalPath = (0, path_handler_1.constructChangelogUrl)(repoUrl, ref, repoType);
             core.info(`Constructed CHANGELOG.md URL from repo_url: ${finalPath}`);
+            debugLog(`  Constructed URL: ${finalPath}`);
         }
         // Check if path is a repository root URL
         else if (path && (0, path_handler_1.isRepoRootUrl)(path)) {
+            debugLog(`Path is a repository root URL: ${path}`);
+            debugLog(`  ref: ${ref}`);
+            debugLog(`  repo_type: ${repoType}`);
             finalPath = (0, path_handler_1.constructChangelogUrl)(path, ref, repoType);
             core.info(`Detected repo root URL, constructed CHANGELOG.md URL: ${finalPath}`);
+            debugLog(`  Constructed URL: ${finalPath}`);
         }
         // Use path as-is (default behavior)
         else {
             finalPath = path || './CHANGELOG.md';
+            debugLog(`Using path as-is: ${finalPath}`);
         }
         // Validation settings are already set from config above
         core.info(`Reading changelog from: ${finalPath}`);
+        debugLog(`Attempting to read content from: ${finalPath}`);
+        debugLog(`  Is URL: ${finalPath.startsWith('http://') || finalPath.startsWith('https://')}`);
+        if (token) {
+            debugLog(`  Token provided: ${token.substring(0, 4)}...`);
+        }
+        else {
+            debugLog(`  No token provided`);
+        }
         // Read changelog content
         let content;
         try {
             content = await (0, path_handler_1.readContent)(finalPath, token);
+            debugLog(`Successfully read ${content.length} characters from changelog`);
         }
         catch (error) {
+            debugLog(`Error reading changelog: ${error instanceof Error ? error.message : String(error)}`);
             // Check if it's a 404 error (file not found)
             if (error instanceof Error && (error.message.includes('404') || error.message.includes('not found'))) {
                 core.info('CHANGELOG.md not found at the specified location');
@@ -25770,11 +25819,22 @@ async function run() {
             throw new Error('Changelog file is empty');
         }
         // Parse changelog
+        debugLog('Parsing changelog content...');
         const parsed = (0, parser_1.parseChangelog)(content);
+        debugLog(`Parsed ${parsed.entries.length} changelog entries`);
         if (parsed.entries.length === 0) {
             throw new Error('No changelog entries found');
         }
         core.info(`Found ${parsed.entries.length} changelog entries`);
+        if (debug && parsed.entries.length > 0) {
+            debugLog('Available versions:');
+            parsed.entries.slice(0, 10).forEach((entry, idx) => {
+                debugLog(`  ${idx + 1}. ${entry.version} (${entry.status})${entry.date ? ` - ${entry.date}` : ''}`);
+            });
+            if (parsed.entries.length > 10) {
+                debugLog(`  ... and ${parsed.entries.length - 10} more`);
+            }
+        }
         // Validate if requested
         if (config.validation_level !== 'none') {
             const validation = (0, parser_1.validateChangelog)(parsed, config);
@@ -25792,8 +25852,10 @@ async function run() {
             }
         }
         // Find the requested version entry
+        debugLog(`Searching for version: ${version || '(latest)'}`);
         const entry = (0, parser_1.findVersionEntry)(parsed, version);
         if (!entry) {
+            debugLog(`Version entry not found. Available versions: ${parsed.entries.map(e => e.version).join(', ')}`);
             const versionMsg = version
                 ? `Version "${version}" not found`
                 : 'No version entry found';
@@ -26246,35 +26308,61 @@ function detectRepoType(repoUrl, repoType = 'auto') {
  * Constructs CHANGELOG.md URL from repository URL and ref
  */
 function constructChangelogUrl(repoUrl, ref, repoType = 'auto') {
+    // Lazy import core for debug logging (only if ACTIONS_STEP_DEBUG is set)
+    const shouldDebug = process.env.ACTIONS_STEP_DEBUG === 'true';
+    const debugLog = (message) => {
+        if (shouldDebug) {
+            // Use console.log for debug since we can't easily import core here synchronously
+            // This will show up in debug logs when ACTIONS_STEP_DEBUG is enabled
+            console.log(`::debug::${message}`);
+        }
+    };
+    debugLog(`constructChangelogUrl called with:`);
+    debugLog(`  repoUrl: ${repoUrl}`);
+    debugLog(`  ref: ${ref}`);
+    debugLog(`  repoType: ${repoType}`);
     // Remove trailing slash and .git suffix if present
     let normalizedUrl = repoUrl.replace(/\/$/, '');
+    const hadGitSuffix = normalizedUrl.endsWith('.git');
     normalizedUrl = normalizedUrl.replace(/\.git$/, '');
+    if (hadGitSuffix) {
+        debugLog(`  Stripped .git suffix: ${normalizedUrl}`);
+    }
     // Parse the repository URL
     const urlMatch = normalizedUrl.match(/^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)$/);
     if (!urlMatch) {
         throw new Error(`Invalid repository URL format: ${repoUrl}`);
     }
     const [, domain, owner, repo] = urlMatch;
+    debugLog(`  Parsed URL: domain=${domain}, owner=${owner}, repo=${repo}`);
     // Detect the repository type
     const detectedType = detectRepoType(repoUrl, repoType);
+    debugLog(`  Detected repository type: ${detectedType} (requested: ${repoType})`);
     // Construct URL based on detected type
+    let constructedUrl;
     switch (detectedType) {
         case 'github':
             if (domain === 'github.com') {
                 // GitHub cloud: use raw.githubusercontent.com
-                return `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/CHANGELOG.md`;
+                constructedUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/CHANGELOG.md`;
             }
             else {
                 // GitHub Enterprise: same domain, use /raw/ path
-                return `https://${domain}/${owner}/${repo}/raw/${ref}/CHANGELOG.md`;
+                constructedUrl = `https://${domain}/${owner}/${repo}/raw/${ref}/CHANGELOG.md`;
             }
+            break;
         case 'gitea':
-            return `https://${domain}/${owner}/${repo}/raw/branch/${ref}/CHANGELOG.md`;
+            constructedUrl = `https://${domain}/${owner}/${repo}/raw/branch/${ref}/CHANGELOG.md`;
+            break;
         case 'gitlab':
-            return `https://${domain}/${owner}/${repo}/-/raw/${ref}/CHANGELOG.md`;
+            constructedUrl = `https://${domain}/${owner}/${repo}/-/raw/${ref}/CHANGELOG.md`;
+            break;
         case 'bitbucket':
-            return `https://${domain}/${owner}/${repo}/raw/${ref}/CHANGELOG.md`;
+            constructedUrl = `https://${domain}/${owner}/${repo}/raw/${ref}/CHANGELOG.md`;
+            break;
     }
+    debugLog(`  Constructed URL: ${constructedUrl}`);
+    return constructedUrl;
 }
 /**
  * Reads content from a local file or remote URL
@@ -26291,12 +26379,25 @@ async function readContent(pathOrUrl, token) {
  * Fetches content from a remote URL
  */
 async function fetchRemoteUrl(url, token) {
+    const shouldDebug = process.env.ACTIONS_STEP_DEBUG === 'true';
+    const debugLog = (message) => {
+        if (shouldDebug) {
+            console.log(`::debug::${message}`);
+        }
+    };
     // Convert blob URLs to raw URLs
     const rawUrl = convertBlobToRaw(url);
+    if (url !== rawUrl) {
+        debugLog(`Converted blob URL to raw URL: ${url} -> ${rawUrl}`);
+    }
     const headers = {};
     if (token) {
         // Try Bearer token first (most common), fallback to token format
         headers['Authorization'] = `Bearer ${token}`;
+        debugLog(`Using Bearer token authentication`);
+    }
+    else {
+        debugLog(`No token provided, making unauthenticated request`);
     }
     const tryFetch = async (urlToTry) => {
         return await fetch(urlToTry, {
@@ -26305,12 +26406,16 @@ async function fetchRemoteUrl(url, token) {
         });
     };
     try {
+        debugLog(`Fetching URL: ${rawUrl}`);
         let response = await tryFetch(rawUrl);
+        debugLog(`Response status: ${response.status} ${response.statusText}`);
         if (!response.ok) {
             // If Bearer token failed, try token format (for GitHub)
             if (response.status === 401 && token && headers['Authorization']?.startsWith('Bearer ')) {
+                debugLog(`Bearer token failed with 401, trying token format`);
                 headers['Authorization'] = `token ${token}`;
                 response = await tryFetch(rawUrl);
+                debugLog(`Retry response status: ${response.status} ${response.statusText}`);
                 if (!response.ok && response.status !== 404) {
                     throw new Error(`Failed to fetch ${rawUrl}: ${response.status} ${response.statusText}`);
                 }
@@ -26318,18 +26423,24 @@ async function fetchRemoteUrl(url, token) {
             // If 404 and URL looks like it might be Gitea format, try GitHub format as fallback
             if (response.status === 404 && rawUrl.includes('/raw/branch/')) {
                 const githubFormatUrl = rawUrl.replace('/raw/branch/', '/raw/');
+                debugLog(`404 with Gitea format, trying GitHub format: ${githubFormatUrl}`);
                 const altResponse = await tryFetch(githubFormatUrl);
                 if (altResponse.ok) {
+                    debugLog(`GitHub format succeeded`);
                     return await altResponse.text();
                 }
+                debugLog(`GitHub format also failed`);
             }
             // If 404 and URL looks like GitHub format, try Gitea format as fallback
             else if (response.status === 404 && rawUrl.match(/\/raw\/[^/]+\/CHANGELOG\.md$/)) {
                 const giteaFormatUrl = rawUrl.replace(/\/raw\/([^/]+)\/CHANGELOG\.md$/, '/raw/branch/$1/CHANGELOG.md');
+                debugLog(`404 with GitHub format, trying Gitea format: ${giteaFormatUrl}`);
                 const altResponse = await tryFetch(giteaFormatUrl);
                 if (altResponse.ok) {
+                    debugLog(`Gitea format succeeded`);
                     return await altResponse.text();
                 }
+                debugLog(`Gitea format also failed`);
             }
             if (!response.ok) {
                 throw new Error(`Failed to fetch ${rawUrl}: ${response.status} ${response.statusText}`);

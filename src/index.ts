@@ -26,6 +26,31 @@ export async function run(): Promise<void> {
       10
     );
     const configFileInput = core.getInput('config_file');
+    const debug = core.getInput('debug') === 'true' || process.env.ACTIONS_STEP_DEBUG === 'true';
+    
+    // Enable ACTIONS_STEP_DEBUG if our debug flag is set
+    if (core.getInput('debug') === 'true' && !process.env.ACTIONS_STEP_DEBUG) {
+      process.env.ACTIONS_STEP_DEBUG = 'true';
+    }
+
+    // Debug logging helper (uses core.debug which respects ACTIONS_STEP_DEBUG)
+    const debugLog = (message: string) => {
+      if (debug) {
+        core.debug(message);
+      }
+    };
+
+    debugLog('=== Changelog Parser Action Debug Mode ===');
+    debugLog(`Inputs received:`);
+    debugLog(`  path: ${path || '(empty)'}`);
+    debugLog(`  repo_url: ${repoUrl || '(empty)'}`);
+    debugLog(`  ref: ${ref}`);
+    debugLog(`  repo_type: ${repoType}`);
+    debugLog(`  version: ${version || '(empty)'}`);
+    debugLog(`  validation_level: ${validationLevel}`);
+    debugLog(`  validation_depth: ${validationDepth}`);
+    debugLog(`  config_file: ${configFileInput || '(empty)'}`);
+    debugLog(`  token: ${token ? '***' : '(empty)'}`);
 
     // Load configuration if provided
     let config: ActionConfig = {
@@ -34,14 +59,20 @@ export async function run(): Promise<void> {
     };
 
     if (configFileInput) {
+      debugLog(`Loading config from: ${configFileInput}`);
       const fileConfig = await loadConfig(configFileInput);
       config = { ...config, ...fileConfig };
+      debugLog(`Config loaded: ${JSON.stringify(fileConfig, null, 2)}`);
     } else {
       // Try to find config file automatically
       const foundConfigFile = await findConfigFile();
       if (foundConfigFile) {
+        debugLog(`Auto-detected config file: ${foundConfigFile}`);
         const fileConfig = await loadConfig(foundConfigFile);
         config = { ...config, ...fileConfig };
+        debugLog(`Config loaded: ${JSON.stringify(fileConfig, null, 2)}`);
+      } else {
+        debugLog('No config file found');
       }
     }
 
@@ -62,30 +93,49 @@ export async function run(): Promise<void> {
     // Determine the final path/URL to use
     let finalPath: string;
     
+    debugLog('=== Determining final path/URL ===');
     // If repo_url is provided, it takes precedence (even if path has a default value)
     if (repoUrl) {
+      debugLog(`Using repo_url (takes precedence): ${repoUrl}`);
+      debugLog(`  ref: ${ref}`);
+      debugLog(`  repo_type: ${repoType}`);
       finalPath = constructChangelogUrl(repoUrl, ref, repoType);
       core.info(`Constructed CHANGELOG.md URL from repo_url: ${finalPath}`);
+      debugLog(`  Constructed URL: ${finalPath}`);
     }
     // Check if path is a repository root URL
     else if (path && isRepoRootUrl(path)) {
+      debugLog(`Path is a repository root URL: ${path}`);
+      debugLog(`  ref: ${ref}`);
+      debugLog(`  repo_type: ${repoType}`);
       finalPath = constructChangelogUrl(path, ref, repoType);
       core.info(`Detected repo root URL, constructed CHANGELOG.md URL: ${finalPath}`);
+      debugLog(`  Constructed URL: ${finalPath}`);
     }
     // Use path as-is (default behavior)
     else {
       finalPath = path || './CHANGELOG.md';
+      debugLog(`Using path as-is: ${finalPath}`);
     }
 
     // Validation settings are already set from config above
 
     core.info(`Reading changelog from: ${finalPath}`);
+    debugLog(`Attempting to read content from: ${finalPath}`);
+    debugLog(`  Is URL: ${finalPath.startsWith('http://') || finalPath.startsWith('https://')}`);
+    if (token) {
+      debugLog(`  Token provided: ${token.substring(0, 4)}...`);
+    } else {
+      debugLog(`  No token provided`);
+    }
 
     // Read changelog content
     let content: string;
     try {
       content = await readContent(finalPath, token);
+      debugLog(`Successfully read ${content.length} characters from changelog`);
     } catch (error) {
+      debugLog(`Error reading changelog: ${error instanceof Error ? error.message : String(error)}`);
       // Check if it's a 404 error (file not found)
       if (error instanceof Error && (error.message.includes('404') || error.message.includes('not found'))) {
         core.info('CHANGELOG.md not found at the specified location');
@@ -104,13 +154,25 @@ export async function run(): Promise<void> {
     }
 
     // Parse changelog
+    debugLog('Parsing changelog content...');
     const parsed = parseChangelog(content);
+    debugLog(`Parsed ${parsed.entries.length} changelog entries`);
 
     if (parsed.entries.length === 0) {
       throw new Error('No changelog entries found');
     }
 
     core.info(`Found ${parsed.entries.length} changelog entries`);
+    
+    if (debug && parsed.entries.length > 0) {
+      debugLog('Available versions:');
+      parsed.entries.slice(0, 10).forEach((entry, idx) => {
+        debugLog(`  ${idx + 1}. ${entry.version} (${entry.status})${entry.date ? ` - ${entry.date}` : ''}`);
+      });
+      if (parsed.entries.length > 10) {
+        debugLog(`  ... and ${parsed.entries.length - 10} more`);
+      }
+    }
 
     // Validate if requested
     if (config.validation_level !== 'none') {
@@ -135,9 +197,11 @@ export async function run(): Promise<void> {
     }
 
     // Find the requested version entry
+    debugLog(`Searching for version: ${version || '(latest)'}`);
     const entry = findVersionEntry(parsed, version);
 
     if (!entry) {
+      debugLog(`Version entry not found. Available versions: ${parsed.entries.map(e => e.version).join(', ')}`);
       const versionMsg = version
         ? `Version "${version}" not found`
         : 'No version entry found';

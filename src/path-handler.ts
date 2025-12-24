@@ -123,9 +123,28 @@ export function constructChangelogUrl(
   ref: string,
   repoType: 'auto' | 'github' | 'gitea' | 'gitlab' | 'bitbucket' = 'auto'
 ): string {
+  // Lazy import core for debug logging (only if ACTIONS_STEP_DEBUG is set)
+  const shouldDebug = process.env.ACTIONS_STEP_DEBUG === 'true';
+  const debugLog = (message: string) => {
+    if (shouldDebug) {
+      // Use console.log for debug since we can't easily import core here synchronously
+      // This will show up in debug logs when ACTIONS_STEP_DEBUG is enabled
+      console.log(`::debug::${message}`);
+    }
+  };
+  
+  debugLog(`constructChangelogUrl called with:`);
+  debugLog(`  repoUrl: ${repoUrl}`);
+  debugLog(`  ref: ${ref}`);
+  debugLog(`  repoType: ${repoType}`);
+  
   // Remove trailing slash and .git suffix if present
   let normalizedUrl = repoUrl.replace(/\/$/, '');
+  const hadGitSuffix = normalizedUrl.endsWith('.git');
   normalizedUrl = normalizedUrl.replace(/\.git$/, '');
+  if (hadGitSuffix) {
+    debugLog(`  Stripped .git suffix: ${normalizedUrl}`);
+  }
   
   // Parse the repository URL
   const urlMatch = normalizedUrl.match(/^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)$/);
@@ -134,27 +153,36 @@ export function constructChangelogUrl(
   }
 
   const [, domain, owner, repo] = urlMatch;
+  debugLog(`  Parsed URL: domain=${domain}, owner=${owner}, repo=${repo}`);
 
   // Detect the repository type
   const detectedType = detectRepoType(repoUrl, repoType);
+  debugLog(`  Detected repository type: ${detectedType} (requested: ${repoType})`);
 
   // Construct URL based on detected type
+  let constructedUrl: string;
   switch (detectedType) {
     case 'github':
       if (domain === 'github.com') {
         // GitHub cloud: use raw.githubusercontent.com
-        return `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/CHANGELOG.md`;
+        constructedUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/CHANGELOG.md`;
       } else {
         // GitHub Enterprise: same domain, use /raw/ path
-        return `https://${domain}/${owner}/${repo}/raw/${ref}/CHANGELOG.md`;
+        constructedUrl = `https://${domain}/${owner}/${repo}/raw/${ref}/CHANGELOG.md`;
       }
+      break;
     case 'gitea':
-      return `https://${domain}/${owner}/${repo}/raw/branch/${ref}/CHANGELOG.md`;
+      constructedUrl = `https://${domain}/${owner}/${repo}/raw/branch/${ref}/CHANGELOG.md`;
+      break;
     case 'gitlab':
-      return `https://${domain}/${owner}/${repo}/-/raw/${ref}/CHANGELOG.md`;
+      constructedUrl = `https://${domain}/${owner}/${repo}/-/raw/${ref}/CHANGELOG.md`;
+      break;
     case 'bitbucket':
-      return `https://${domain}/${owner}/${repo}/raw/${ref}/CHANGELOG.md`;
+      constructedUrl = `https://${domain}/${owner}/${repo}/raw/${ref}/CHANGELOG.md`;
+      break;
   }
+  debugLog(`  Constructed URL: ${constructedUrl}`);
+  return constructedUrl;
 }
 
 /**
@@ -175,13 +203,26 @@ export async function readContent(
  * Fetches content from a remote URL
  */
 async function fetchRemoteUrl(url: string, token?: string): Promise<string> {
+  const shouldDebug = process.env.ACTIONS_STEP_DEBUG === 'true';
+  const debugLog = (message: string) => {
+    if (shouldDebug) {
+      console.log(`::debug::${message}`);
+    }
+  };
+  
   // Convert blob URLs to raw URLs
   const rawUrl = convertBlobToRaw(url);
+  if (url !== rawUrl) {
+    debugLog(`Converted blob URL to raw URL: ${url} -> ${rawUrl}`);
+  }
 
   const headers: Record<string, string> = {};
   if (token) {
     // Try Bearer token first (most common), fallback to token format
     headers['Authorization'] = `Bearer ${token}`;
+    debugLog(`Using Bearer token authentication`);
+  } else {
+    debugLog(`No token provided, making unauthenticated request`);
   }
 
   const tryFetch = async (urlToTry: string): Promise<Response> => {
@@ -192,13 +233,17 @@ async function fetchRemoteUrl(url: string, token?: string): Promise<string> {
   };
 
   try {
+    debugLog(`Fetching URL: ${rawUrl}`);
     let response = await tryFetch(rawUrl);
+    debugLog(`Response status: ${response.status} ${response.statusText}`);
 
     if (!response.ok) {
       // If Bearer token failed, try token format (for GitHub)
       if (response.status === 401 && token && headers['Authorization']?.startsWith('Bearer ')) {
+        debugLog(`Bearer token failed with 401, trying token format`);
         headers['Authorization'] = `token ${token}`;
         response = await tryFetch(rawUrl);
+        debugLog(`Retry response status: ${response.status} ${response.statusText}`);
         if (!response.ok && response.status !== 404) {
           throw new Error(
             `Failed to fetch ${rawUrl}: ${response.status} ${response.statusText}`
@@ -209,18 +254,24 @@ async function fetchRemoteUrl(url: string, token?: string): Promise<string> {
       // If 404 and URL looks like it might be Gitea format, try GitHub format as fallback
       if (response.status === 404 && rawUrl.includes('/raw/branch/')) {
         const githubFormatUrl = rawUrl.replace('/raw/branch/', '/raw/');
+        debugLog(`404 with Gitea format, trying GitHub format: ${githubFormatUrl}`);
         const altResponse = await tryFetch(githubFormatUrl);
         if (altResponse.ok) {
+          debugLog(`GitHub format succeeded`);
           return await altResponse.text();
         }
+        debugLog(`GitHub format also failed`);
       }
       // If 404 and URL looks like GitHub format, try Gitea format as fallback
       else if (response.status === 404 && rawUrl.match(/\/raw\/[^/]+\/CHANGELOG\.md$/)) {
         const giteaFormatUrl = rawUrl.replace(/\/raw\/([^/]+)\/CHANGELOG\.md$/, '/raw/branch/$1/CHANGELOG.md');
+        debugLog(`404 with GitHub format, trying Gitea format: ${giteaFormatUrl}`);
         const altResponse = await tryFetch(giteaFormatUrl);
         if (altResponse.ok) {
+          debugLog(`Gitea format succeeded`);
           return await altResponse.text();
         }
+        debugLog(`Gitea format also failed`);
       }
 
       if (!response.ok) {

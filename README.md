@@ -141,6 +141,7 @@ Both approaches work the same way - the action will automatically detect that it
 | `validation_level` | Validation level: `none`, `warn`, or `error` | No | `none` |
 | `validation_depth` | Number of entries to validate | No | `10` |
 | `config_file` | Path to configuration file | No | Auto-detect |
+| `debug` | Enable debug logging for troubleshooting. Set to `true` to see detailed information about URL construction, repository type detection, and HTTP requests. Also respects `ACTIONS_STEP_DEBUG` environment variable | No | `false` |
 
 ## Outputs
 
