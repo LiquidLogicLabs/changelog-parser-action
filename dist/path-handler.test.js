@@ -76,6 +76,54 @@ describe('isRepoRootUrl', () => {
         });
     });
 });
+describe('detectRepoType', () => {
+    describe('Explicit repo type', () => {
+        it('should return explicit github type', () => {
+            expect((0, path_handler_1.detectRepoType)('https://git.example.com/owner/repo', 'github')).toBe('github');
+        });
+        it('should return explicit gitea type', () => {
+            expect((0, path_handler_1.detectRepoType)('https://git.example.com/owner/repo', 'gitea')).toBe('gitea');
+        });
+        it('should return explicit gitlab type', () => {
+            expect((0, path_handler_1.detectRepoType)('https://git.example.com/owner/repo', 'gitlab')).toBe('gitlab');
+        });
+        it('should return explicit bitbucket type', () => {
+            expect((0, path_handler_1.detectRepoType)('https://git.example.com/owner/repo', 'bitbucket')).toBe('bitbucket');
+        });
+    });
+    describe('Auto-detection', () => {
+        it('should detect github.com as github', () => {
+            expect((0, path_handler_1.detectRepoType)('https://github.com/owner/repo', 'auto')).toBe('github');
+        });
+        it('should detect github enterprise as github', () => {
+            expect((0, path_handler_1.detectRepoType)('https://github.example.com/owner/repo', 'auto')).toBe('github');
+        });
+        it('should detect gitlab.com as gitlab', () => {
+            expect((0, path_handler_1.detectRepoType)('https://gitlab.com/owner/repo', 'auto')).toBe('gitlab');
+        });
+        it('should detect gitlab enterprise as gitlab', () => {
+            expect((0, path_handler_1.detectRepoType)('https://gitlab.example.com/owner/repo', 'auto')).toBe('gitlab');
+        });
+        it('should detect bitbucket.org as bitbucket', () => {
+            expect((0, path_handler_1.detectRepoType)('https://bitbucket.org/owner/repo', 'auto')).toBe('bitbucket');
+        });
+        it('should detect bitbucket server as bitbucket', () => {
+            expect((0, path_handler_1.detectRepoType)('https://bitbucket.example.com/owner/repo', 'auto')).toBe('bitbucket');
+        });
+        it('should detect gitea.com as gitea', () => {
+            expect((0, path_handler_1.detectRepoType)('https://gitea.com/owner/repo', 'auto')).toBe('gitea');
+        });
+        it('should detect gitea self-hosted as gitea', () => {
+            expect((0, path_handler_1.detectRepoType)('https://gitea.example.com/owner/repo', 'auto')).toBe('gitea');
+        });
+        it('should default to gitea for unknown domains', () => {
+            expect((0, path_handler_1.detectRepoType)('https://git.ravenwolf.org/owner/repo', 'auto')).toBe('gitea');
+        });
+        it('should default to gitea for invalid URLs', () => {
+            expect((0, path_handler_1.detectRepoType)('not-a-url', 'auto')).toBe('gitea');
+        });
+    });
+});
 describe('constructChangelogUrl', () => {
     describe('GitHub URLs', () => {
         it('should construct GitHub cloud URL correctly', () => {
@@ -143,6 +191,28 @@ describe('constructChangelogUrl', () => {
             expect(() => {
                 (0, path_handler_1.constructChangelogUrl)('https://github.com/owner/repo/subdir', 'main');
             }).toThrow('Invalid repository URL format');
+        });
+    });
+    describe('Explicit repo_type parameter', () => {
+        it('should use explicit gitea type for custom domain', () => {
+            const result = (0, path_handler_1.constructChangelogUrl)('https://git.ravenwolf.org/owner/repo', 'main', 'gitea');
+            expect(result).toBe('https://git.ravenwolf.org/owner/repo/raw/branch/main/CHANGELOG.md');
+        });
+        it('should use explicit github type for custom domain', () => {
+            const result = (0, path_handler_1.constructChangelogUrl)('https://git.example.com/owner/repo', 'main', 'github');
+            expect(result).toBe('https://git.example.com/owner/repo/raw/main/CHANGELOG.md');
+        });
+        it('should use explicit gitlab type for custom domain', () => {
+            const result = (0, path_handler_1.constructChangelogUrl)('https://git.example.com/owner/repo', 'main', 'gitlab');
+            expect(result).toBe('https://git.example.com/owner/repo/-/raw/main/CHANGELOG.md');
+        });
+        it('should use explicit bitbucket type for custom domain', () => {
+            const result = (0, path_handler_1.constructChangelogUrl)('https://git.example.com/owner/repo', 'main', 'bitbucket');
+            expect(result).toBe('https://git.example.com/owner/repo/raw/main/CHANGELOG.md');
+        });
+        it('should use auto detection when repo_type is auto', () => {
+            const result = (0, path_handler_1.constructChangelogUrl)('https://github.com/owner/repo', 'main', 'auto');
+            expect(result).toBe('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md');
         });
     });
 });

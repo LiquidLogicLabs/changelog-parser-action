@@ -15,6 +15,8 @@ export async function run(): Promise<void> {
     let path = core.getInput('path');
     let repoUrl = core.getInput('repo_url');
     let ref = core.getInput('ref') || 'main';
+    let repoType = (core.getInput('repo_type') ||
+      'auto') as 'auto' | 'github' | 'gitea' | 'gitlab' | 'bitbucket';
     const token = core.getInput('token') || process.env.GITHUB_TOKEN;
     const version = core.getInput('version');
     const validationLevel = (core.getInput('validation_level') ||
@@ -53,18 +55,21 @@ export async function run(): Promise<void> {
     if (config.ref && !core.getInput('ref')) {
       ref = config.ref;
     }
+    if (config.repo_type && !core.getInput('repo_type')) {
+      repoType = config.repo_type;
+    }
 
     // Determine the final path/URL to use
     let finalPath: string;
     
     // Check if path is blank/empty and repo_url is provided
     if ((!path || path.trim() === '') && repoUrl) {
-      finalPath = constructChangelogUrl(repoUrl, ref);
+      finalPath = constructChangelogUrl(repoUrl, ref, repoType);
       core.info(`Constructed CHANGELOG.md URL from repo_url: ${finalPath}`);
     }
     // Check if path is a repository root URL
     else if (path && isRepoRootUrl(path)) {
-      finalPath = constructChangelogUrl(path, ref);
+      finalPath = constructChangelogUrl(path, ref, repoType);
       core.info(`Detected repo root URL, constructed CHANGELOG.md URL: ${finalPath}`);
     }
     // Use path as-is (default behavior)

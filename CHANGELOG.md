@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4] - 2025-01-XX
+
+### Added
+- `repo_type` input parameter to explicitly specify repository platform type (auto, github, gitea, gitlab, bitbucket)
+- `detectRepoType` function for efficient repository type detection
+- Support for custom Gitea domains (e.g., git.ravenwolf.org) via auto-detection or explicit `repo_type: gitea`
+
+### Fixed
+- Fixed URL construction for Gitea instances with custom domains that don't contain "gitea" in the domain name
+- Improved fallback logic in `fetchRemoteUrl` to try alternative URL formats on 404 errors
+
+### Changed
+- Refactored `constructChangelogUrl` to use `detectRepoType` for cleaner, more maintainable code
+- Default behavior for unknown domains now uses Gitea format (many self-hosted Gitea instances use custom domains)
+
 ## [1.0.1] - 2025-12-23
 
 ### Added

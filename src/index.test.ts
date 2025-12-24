@@ -104,7 +104,7 @@ describe('Changelog Parser Action', () => {
       // Call run() directly
       await run();
 
-      expect(mockConstructChangelogUrl).toHaveBeenCalledWith('https://github.com/owner/repo', 'main');
+      expect(mockConstructChangelogUrl).toHaveBeenCalledWith('https://github.com/owner/repo', 'main', 'auto');
       expect(mockReadContent).toHaveBeenCalledWith('https://raw.githubusercontent.com/owner/repo/main/CHANGELOG.md', undefined);
     });
 
@@ -131,7 +131,7 @@ describe('Changelog Parser Action', () => {
 
       await run();
 
-      expect(mockConstructChangelogUrl).toHaveBeenCalledWith('https://github.com/owner/repo', 'develop');
+      expect(mockConstructChangelogUrl).toHaveBeenCalledWith('https://github.com/owner/repo', 'develop', 'auto');
     });
 
     it('should default to main when ref is not provided', async () => {
@@ -157,7 +157,7 @@ describe('Changelog Parser Action', () => {
 
       await run();
 
-      expect(mockConstructChangelogUrl).toHaveBeenCalledWith('https://github.com/owner/repo', 'main');
+      expect(mockConstructChangelogUrl).toHaveBeenCalledWith('https://github.com/owner/repo', 'main', 'auto');
     });
   });
 
@@ -187,7 +187,7 @@ describe('Changelog Parser Action', () => {
       await run();
 
       expect(mockIsRepoRootUrl).toHaveBeenCalledWith('https://github.com/owner/repo');
-      expect(mockConstructChangelogUrl).toHaveBeenCalledWith('https://github.com/owner/repo', 'main');
+      expect(mockConstructChangelogUrl).toHaveBeenCalledWith('https://github.com/owner/repo', 'main', 'auto');
     });
 
     it('should not detect repo root if path is a file URL', async () => {

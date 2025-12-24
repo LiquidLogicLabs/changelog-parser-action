@@ -75,9 +75,54 @@ export function isRepoRootUrl(url: string): boolean {
 }
 
 /**
+ * Detects repository type from URL or returns explicit type
+ * @param repoUrl The repository URL
+ * @param repoType Explicit repo type or 'auto' for auto-detection
+ * @returns Detected or explicit repository type
+ */
+export function detectRepoType(
+  repoUrl: string,
+  repoType: 'auto' | 'github' | 'gitea' | 'gitlab' | 'bitbucket' = 'auto'
+): 'github' | 'gitea' | 'gitlab' | 'bitbucket' {
+  // If explicitly set, return it
+  if (repoType !== 'auto') {
+    return repoType;
+  }
+
+  // Auto-detect from domain
+  const normalizedUrl = repoUrl.replace(/\/$/, '');
+  const urlMatch = normalizedUrl.match(/^https?:\/\/([^/]+)\//);
+  if (!urlMatch) {
+    // Invalid URL format - default to gitea (matches current fallback behavior)
+    return 'gitea';
+  }
+
+  const domain = urlMatch[1].toLowerCase();
+
+  if (domain === 'github.com') {
+    return 'github';
+  } else if (domain.includes('github')) {
+    return 'github';
+  } else if (domain.includes('gitlab')) {
+    return 'gitlab';
+  } else if (domain.includes('bitbucket')) {
+    return 'bitbucket';
+  } else if (domain.includes('gitea')) {
+    return 'gitea';
+  } else {
+    // Unknown platform - default to gitea (many self-hosted Gitea instances use custom domains)
+    return 'gitea';
+  }
+}
+
+/**
  * Constructs CHANGELOG.md URL from repository URL and ref
  */
-export function constructChangelogUrl(repoUrl: string, ref: string): string {
+export function constructChangelogUrl(
+  repoUrl: string,
+  ref: string,
+  repoType: 'auto' | 'github' | 'gitea' | 'gitlab' | 'bitbucket' = 'auto'
+): string {
   // Remove trailing slash
   const normalizedUrl = repoUrl.replace(/\/$/, '');
   
@@ -89,25 +134,25 @@ export function constructChangelogUrl(repoUrl: string, ref: string): string {
 
   const [, domain, owner, repo] = urlMatch;
 
-  // Determine platform and construct appropriate raw URL
-  if (domain === 'github.com') {
-    // GitHub cloud: use raw.githubusercontent.com
-    return `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/CHANGELOG.md`;
-  } else if (domain.includes('github')) {
-    // GitHub Enterprise: same domain, use /raw/ path
-    return `https://${domain}/${owner}/${repo}/raw/${ref}/CHANGELOG.md`;
-  } else if (domain.includes('gitlab')) {
-    // GitLab: cloud or enterprise
-    return `https://${domain}/${owner}/${repo}/-/raw/${ref}/CHANGELOG.md`;
-  } else if (domain.includes('bitbucket')) {
-    // Bitbucket: cloud or server
-    return `https://${domain}/${owner}/${repo}/raw/${ref}/CHANGELOG.md`;
-  } else if (domain.includes('gitea')) {
-    // Gitea: cloud or self-hosted
-    return `https://${domain}/${owner}/${repo}/raw/branch/${ref}/CHANGELOG.md`;
-  } else {
-    // Unknown platform - try GitHub-style format as fallback
-    return `https://${domain}/${owner}/${repo}/raw/${ref}/CHANGELOG.md`;
+  // Detect the repository type
+  const detectedType = detectRepoType(repoUrl, repoType);
+
+  // Construct URL based on detected type
+  switch (detectedType) {
+    case 'github':
+      if (domain === 'github.com') {
+        // GitHub cloud: use raw.githubusercontent.com
+        return `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/CHANGELOG.md`;
+      } else {
+        // GitHub Enterprise: same domain, use /raw/ path
+        return `https://${domain}/${owner}/${repo}/raw/${ref}/CHANGELOG.md`;
+      }
+    case 'gitea':
+      return `https://${domain}/${owner}/${repo}/raw/branch/${ref}/CHANGELOG.md`;
+    case 'gitlab':
+      return `https://${domain}/${owner}/${repo}/-/raw/${ref}/CHANGELOG.md`;
+    case 'bitbucket':
+      return `https://${domain}/${owner}/${repo}/raw/${ref}/CHANGELOG.md`;
   }
 }
 
@@ -138,30 +183,50 @@ async function fetchRemoteUrl(url: string, token?: string): Promise<string> {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  try {
-    const response = await fetch(rawUrl, {
+  const tryFetch = async (urlToTry: string): Promise<Response> => {
+    return await fetch(urlToTry, {
       headers,
       redirect: 'follow',
     });
+  };
+
+  try {
+    let response = await tryFetch(rawUrl);
 
     if (!response.ok) {
       // If Bearer token failed, try token format (for GitHub)
       if (response.status === 401 && token && headers['Authorization']?.startsWith('Bearer ')) {
         headers['Authorization'] = `token ${token}`;
-        const retryResponse = await fetch(rawUrl, {
-          headers,
-          redirect: 'follow',
-        });
-        if (!retryResponse.ok) {
+        response = await tryFetch(rawUrl);
+        if (!response.ok && response.status !== 404) {
           throw new Error(
-            `Failed to fetch ${rawUrl}: ${retryResponse.status} ${retryResponse.statusText}`
+            `Failed to fetch ${rawUrl}: ${response.status} ${response.statusText}`
           );
         }
-        return await retryResponse.text();
       }
-      throw new Error(
-        `Failed to fetch ${rawUrl}: ${response.status} ${response.statusText}`
-      );
+
+      // If 404 and URL looks like it might be Gitea format, try GitHub format as fallback
+      if (response.status === 404 && rawUrl.includes('/raw/branch/')) {
+        const githubFormatUrl = rawUrl.replace('/raw/branch/', '/raw/');
+        const altResponse = await tryFetch(githubFormatUrl);
+        if (altResponse.ok) {
+          return await altResponse.text();
+        }
+      }
+      // If 404 and URL looks like GitHub format, try Gitea format as fallback
+      else if (response.status === 404 && rawUrl.match(/\/raw\/[^/]+\/CHANGELOG\.md$/)) {
+        const giteaFormatUrl = rawUrl.replace(/\/raw\/([^/]+)\/CHANGELOG\.md$/, '/raw/branch/$1/CHANGELOG.md');
+        const altResponse = await tryFetch(giteaFormatUrl);
+        if (altResponse.ok) {
+          return await altResponse.text();
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch ${rawUrl}: ${response.status} ${response.statusText}`
+        );
+      }
     }
 
     return await response.text();

@@ -8,6 +8,7 @@ export interface ActionConfig {
     path?: string;
     repo_url?: string;
     ref?: string;
+    repo_type?: 'auto' | 'github' | 'gitea' | 'gitlab' | 'bitbucket';
     validation_level?: 'none' | 'warn' | 'error';
     validation_depth?: number;
 }
