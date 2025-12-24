@@ -259,7 +259,8 @@ on:
     branches: ['**']
 
 jobs:
-  lint-and-test:
+  lint:
+    if: github.ref_type != 'tag'  # Skip CI on tag pushes (handled by release workflow)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -300,6 +301,10 @@ jobs:
           INPUT_PATH: ./CHANGELOG.md
           INPUT_VERSION: Unreleased
         continue-on-error: true
+
+  test:
+    if: github.ref_type != 'tag'  # Skip CI on tag pushes (handled by release workflow)
+    uses: ./.github/workflows/test.yml
 ```
 
 ### Reusable Test Workflow (.github/workflows/test.yml)
@@ -473,10 +478,17 @@ jobs:
           mode: "HYBRID"
           configurationJson: |
             {
-              "template": "#{{CHANGELOG}}\n\n<details>\n<summary>Pull Requests</summary>\n\n#{{PR_LIST}}\n</details>\n\n---\n\n### Usage\n\n\\`\\`\\`yaml\n- uses: org/action-name@${{ github.ref_name }}\n  with:\n    input-name: 'value'\n\\`\\`\\`"
+              "template": "#{{CHANGELOG}}\n\n<details>\n<summary>Pull Requests</summary>\n\n#{{PR_LIST}}\n</details>\n\n---\n\n### Usage\n\n```yaml\n- uses: org/action-name@${{ github.ref_name }}\n  with:\n    input-name: 'value'\n```"
             }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create/Update Major, Minor, and Latest Version Tags
+        if: steps.version.outputs.is_stable == 'true'
+        uses: simbo/action-semver-release-action@latest
+        with:
+          create-release: false  # We handle release creation separately with changelog
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
@@ -498,6 +510,7 @@ jobs:
             echo "- **Status**: ⚠️ Pre-release (for testing)" >> $GITHUB_STEP_SUMMARY
           else
             echo "- **Status**: ✅ Stable release" >> $GITHUB_STEP_SUMMARY
+            echo "- **Version Tags Created**: \`@v${{ steps.version.outputs.major }}\`, \`@v${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }}\`, \`@latest\`, \`@${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           fi
 ```
 
@@ -573,10 +586,17 @@ jobs:
           mode: "HYBRID"
           configurationJson: |
             {
-              "template": "#{{CHANGELOG}}\n\n<details>\n<summary>Pull Requests</summary>\n\n#{{PR_LIST}}\n</details>\n\n---\n\n### Usage\n\n\\`\\`\\`yaml\n- uses: org/action-name@${{ github.ref_name }}\n  with:\n    input-name: 'value'\n\\`\\`\\`"
+              "template": "#{{CHANGELOG}}\n\n<details>\n<summary>Pull Requests</summary>\n\n#{{PR_LIST}}\n</details>\n\n---\n\n### Usage\n\n```yaml\n- uses: org/action-name@${{ github.ref_name }}\n  with:\n    input-name: 'value'\n```"
             }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create/Update Major, Minor, and Latest Version Tags
+        if: steps.version.outputs.is_stable == 'true'
+        uses: simbo/action-semver-release-action@latest
+        with:
+          create-release: false  # We handle release creation separately with changelog
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
@@ -598,6 +618,7 @@ jobs:
             echo "- **Status**: ⚠️ Pre-release (for testing)" >> $GITHUB_STEP_SUMMARY
           else
             echo "- **Status**: ✅ Stable release" >> $GITHUB_STEP_SUMMARY
+            echo "- **Version Tags Created**: \`@v${{ steps.version.outputs.major }}\`, \`@v${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }}\`, \`@latest\`, \`@${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           fi
 ```
 
@@ -609,6 +630,9 @@ jobs:
 - **For Node.js actions**: Build and package before release (creates `dist/index.js`)
 - **For composite actions**: Validate `action.yml` and shell script syntax before release
 - **Self-contained**: Release workflow should run all checks independently (lint + test), not depend on external CI workflows
+- **CI Workflow**: Should skip on tag pushes using `if: github.ref_type != 'tag'` to avoid duplicate runs (release workflow handles tag pushes)
+- **Floating Tags**: Use `simbo/action-semver-release-action@latest` to create/update major (`v1`), minor (`v1.2`), and `latest` tags for stable releases
+- **Version Pinning**: Users can pin to `@v1` (major), `@v1.2` (minor), `@latest` (latest stable), or `@v1.2.3` (exact version)
 - **Optional**: Include usage examples in release notes template for better user experience
 - **Optional**: Create package manifest for tracking build metadata
 - **Optional**: Add release summary step for better workflow visibility
@@ -764,9 +788,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    - **For Node.js actions**: Builds and packages the action
    - **For composite actions**: Validates `action.yml` and shell script syntax
    - Generates release notes from PRs/commits using `release-changelog-builder-action`
+   - **Creates/updates floating tags** (`v1`, `v1.2`, `latest`) using `simbo/action-semver-release-action` (stable releases only)
    - Creates GitHub release with generated notes
    - Detects prerelease status automatically
-5. **Action is available** at `@v1.2.3`
+5. **Action is available** at multiple version pins:
+   - `@v1` - Latest v1.x.x (major version)
+   - `@v1.2` - Latest v1.2.x (minor version)
+   - `@latest` - Latest stable release
+   - `@v1.2.3` - Exact version
 
 **Important**: Lint and tests are **required** to pass before a release is created. The release job uses `needs: [lint, test]` to ensure all checks complete successfully. The release workflow is self-contained and runs all validation independently.
 
