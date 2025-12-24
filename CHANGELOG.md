@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] - 2025-12-24
+
+### Added
+- `debug` input parameter to enable verbose logging for troubleshooting
+- Detailed debug logging for input values, config loading, URL construction, and HTTP requests
+- Debug logging respects `ACTIONS_STEP_DEBUG` environment variable
+- Helps troubleshoot issues with URL construction and repository type detection
+
 ## [1.0.5] - 2025-12-24
 
 ### Fixed
